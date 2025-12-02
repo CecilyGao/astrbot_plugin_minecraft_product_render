@@ -18,7 +18,6 @@ import pathlib
 # ========== API URLs ==========
 MOJANG_API_URL = "https://api.mojang.com/users/profiles/minecraft/{username}"
 STARLIGHT_RENDER_URL = "https://starlightskins.lunareclipse.studio/render/{rendertype}/{uuid}/{rendercrop}"
-WALLPAPER_API_URL = "https://starlightskins.lunareclipse.studio/render/wallpaper/{wallpaper_id}/{playernames}"
 
 # ========== 渲染类型配置 ==========
 VALID_RENDERTYPES = {
@@ -29,26 +28,10 @@ VALID_RENDERTYPES = {
     "high_ground", "clown", "bitzel", "pixel", "ornament", "skin", "profile"
 }
 
-WALLPAPER_CONFIGS = {
-    "herobrine_hill": 1,
-    "quick_hide": 3,
-    "malevolent": 1,
-    "off_to_the_stars": 1,
-    "wheat": 1
-}
-
 # ========== 默认配置 ==========
 DEFAULT_RENDERTYPE = "default"
 DEFAULT_RENDERCROP = "full"
 SKIN_RENDERCROP = "default"
-DEFAULT_WALLPAPER = "herobrine_hill"
-
-# ========== 自定义皮肤配置 ==========
-FILE_WAIT_TIMEOUT = 30
-DEFAULT_CAMERA_POSITION = {"x": 0, "y": 0, "z": 0}
-DEFAULT_CAMERA_FOCAL_POINT = {"x": 0, "y": 0, "z": 0}
-CAMERA_PRESETS = {}
-FOCAL_PRESETS = {}
 
 # ========== Passport 配置 ==========
 PASSPORT_CONFIG = {
@@ -231,19 +214,9 @@ def validate_rendertype(rendertype: str) -> tuple[bool, str | None]:
         valid_types_sample = ", ".join(sorted(VALID_RENDERTYPES)[:5]) + "..."
         error_msg = (f"未知的渲染类型 '{rendertype}'。\n"
                     f"有效类型例如: {valid_types_sample}\n"
-                    f"输入 /skinhelp 查看完整列表。")
+                    f"输入 /producthelp 查看完整列表。")
         return False, error_msg
     return True, None
-
-def validate_wallpaper(wallpaper_id: str) -> tuple[bool, str | None, int]:
-    """验证壁纸ID"""
-    if wallpaper_id not in WALLPAPER_CONFIGS:
-        available_wallpapers = ", ".join(sorted(WALLPAPER_CONFIGS.keys()))
-        error_msg = (f"未知的壁纸类型 '{wallpaper_id}'。\n"
-                    f"可用壁纸: {available_wallpapers}\n"
-                    f"输入 /skinhelp 查看详细信息。")
-        return False, error_msg, 0
-    return True, None, WALLPAPER_CONFIGS[wallpaper_id]
 
 async def get_player_uuid(session, username: str) -> tuple[str | None, str | None]:
     """获取玩家UUID"""
@@ -273,188 +246,40 @@ async def get_player_uuid(session, username: str) -> tuple[str | None, str | Non
         logger.error(f"获取 {username} 的 UUID 时发生未知错误: {e}", exc_info=True)
         return None, "查询玩家信息时发生内部错误。"
 
-async def process_skin_command(session, username: str, rendertype: str):
-    """处理皮肤命令的核心逻辑"""
-    rendertype_lower = rendertype.lower()
-    is_valid, error_msg = validate_rendertype(rendertype_lower)
-    if not is_valid:
-        return error_msg
-
-    uuid, error_msg = await get_player_uuid(session, username)
-    if error_msg:
-        return error_msg
-
-    rendercrop = SKIN_RENDERCROP if rendertype_lower == "skin" else DEFAULT_RENDERCROP
-    render_url = STARLIGHT_RENDER_URL.format(
-        rendertype=rendertype_lower,
-        uuid=uuid,
-        rendercrop=rendercrop
-    )
-
-    logger.info(f"为 {username} 生成渲染 URL: {render_url}")
-    render_desc = f"'{rendertype_lower}' 渲染"
-    
-    return [
-        Comp.Plain(f"这是 {username} 的 {render_desc}：\n"),
-        Comp.Image.fromURL(url=render_url)
-    ]
-
-async def process_wallpaper_command(session, wallpaper_id: str, usernames: list[str]):
-    """处理壁纸命令的核心逻辑"""
-    wallpaper_lower = wallpaper_id.lower()
-    is_valid, error_msg, max_players = validate_wallpaper(wallpaper_lower)
-    if not is_valid:
-        return error_msg
-
-    if not usernames:
-        return (
-            f"错误：壁纸 '{wallpaper_lower}' 至少需要1个玩家名称。\n"
-            f"用法：/wallpaper {wallpaper_lower} <玩家名1> [玩家名2] ...\n"
-            f"该壁纸最多支持 {max_players} 个玩家。"
-        )
-
-    actual_usernames = usernames
-    warning_msg = ""
-    if len(actual_usernames) > max_players:
-        warning_msg = f"⚠️ 注意：壁纸 '{wallpaper_lower}' 最多支持 {max_players} 个玩家，已自动截取前 {max_players} 个。\n\n"
-        actual_usernames = actual_usernames[:max_players]
-
-    player_uuids = []
-    failed_players = []
-
-    for username in actual_usernames:
-        uuid, error_msg_uuid = await get_player_uuid(session, username)
-        if error_msg_uuid:
-            failed_players.append(username)
-            logger.warning(f"无法获取玩家 {username} 的 UUID，跳过该玩家")
-        else:
-            player_uuids.append(uuid)
-
-    if not player_uuids:
-        error_list = "\n".join([f"• {player}" for player in failed_players])
-        return (
-            f"错误：无法获取任何玩家的 UUID。\n"
-            f"失败的玩家：\n{error_list}"
-        )
-
-    if failed_players:
-        failed_list = ", ".join(failed_players)
-        warning_msg += f"⚠️ 以下玩家未找到，已跳过：{failed_list}\n\n"
-
-    player_uuids_path = ",".join(player_uuids)
-    wallpaper_url = WALLPAPER_API_URL.format(
-        wallpaper_id=wallpaper_lower,
-        playernames=player_uuids_path
-    )
-
-    logger.info(f"为壁纸 '{wallpaper_lower}' 生成 URL（{len(player_uuids)} 个玩家）: {wallpaper_url}")
-
-    success_players = [name for name in actual_usernames if name not in failed_players]
-    players_desc = ", ".join(success_players)
-    
-    return [
-        Comp.Plain(f"{warning_msg}这是壁纸 '{wallpaper_lower}' (玩家: {players_desc})：\n"),
-        Comp.Image.fromURL(url=wallpaper_url)
-    ]
-
-async def upload_and_render_custom_skin(session, uuid, file_url, username, camera_position=None, camera_focal_point=None):
-    """上传并渲染自定义皮肤"""
-    # 这里应该是自定义皮肤渲染的逻辑
-    # 由于原代码中没有完整实现，这里返回一个占位消息
-    return [
-        Comp.Plain(f"自定义皮肤渲染功能 - 玩家: {username}\n"),
-        Comp.Plain(f"模型文件: {file_url}\n"),
-        Comp.Plain("自定义皮肤渲染功能正在开发中...")
-    ]
-
 def replace_hyphens_with_spaces(text: str) -> str:
     """将文本中的^替换为空格，允许中文输入"""
     if text is None:
         return ""
     return str(text).replace('^', ' ')
 
-def get_help_text():
-    """获取帮助文本"""
+def get_product_help_text():
+    """获取文创渲染帮助文本"""
     return (
-        "--- Minecraft 皮肤渲染插件帮助 ---\n\n"
-        "【指令1】/skin <param1> [param2]\n"
-        "用法1 (推荐): /skin <渲染类型> <玩家名称>\n"
-        "  » 示例: /skin walking Notch\n\n"
-        f"  <渲染类型>: 可选。默认为 '{DEFAULT_RENDERTYPE}'。\n\n"
-        "--- 所有可用的 [rendertype] 列表 ---\n"
-        "用法2: /skin <玩家名称>\n"
-        "  » 示例: /skin Notch\n"
-        f"  <玩家名称>: 必需。玩家的 Minecraft ID。\n"
-        + ", ".join(sorted(VALID_RENDERTYPES)) +
-        "\n\n【指令2】/wallpaper [param1] [param2] ...\n"
-        "用法1 (推荐): /wallpaper <壁纸ID> <玩家1> [玩家2] ...\n"
-        "  » 示例: /wallpaper quick_hide Notch\n\n"
-        "用法2: /wallpaper <玩家1> [玩家2] ...\n"
-        "  » 示例: /wallpaper Notch Steve\n"
-        f"  <壁纸ID>: 可选。默认为 '{DEFAULT_WALLPAPER}'。\n"
-        "  <玩家...>: 必需。至少1个玩家名称。\n\n"
-        "--- 可用的壁纸ID及玩家上限 ---\n" +
-        "\n".join([f"  • {wp_id} (最多 {max_p} 个玩家)" for wp_id, max_p in sorted(WALLPAPER_CONFIGS.items())]) +
-        "\n\n【指令3】/customskin <玩家名称> [相机预设] [焦点预设]\n"
-        "  » 示例: /customskin Notch\n"
-        "  使用自定义 .obj 模型文件渲染皮肤\n\n"
-        "【指令4】/passport <渲染类型> <玩家名> <RGB> <称号> <想说的话> <愿望>\n"
+        "--- Minecraft 文创渲染插件帮助 ---\n\n"
+        "【指令1】/passport <渲染类型> <玩家名> <RGB> <称号> <想说的话> <愿望>\n"
         "  » 示例: /passport default Notch 255,0,0 my^title Hello,^world! 好运^连连Good-luck!\n\n"
-        "  <渲染类型>: 皮肤渲染类型\n\n"
+        "  参数说明:\n"
+        "  <渲染类型>: 皮肤渲染类型，可选值如下：\n"
+        f"    {', '.join(sorted(VALID_RENDERTYPES)[:10])}...\n"
+        "    输入 /rendertypes 查看完整列表\n\n"
         "  <玩家名>: Minecraft 玩家名称\n\n"
-        "  <RGB>: 颜色值，格式: 255,0,0\n\n"
+        "  <RGB>: 颜色值，格式: 255,0,0 (红,绿,蓝)\n\n"
         "  <称号>: 玩家称号（支持中英文，空格用^<shift+6>代替）\n\n"
         "  <想说的话>: 玩家想说的话（支持中英文，空格用^<shift+6>代替）\n\n"
         "  <愿望>: 玩家的愿望（支持中英文，空格用^<shift+6>代替）\n\n"
+        "  注意：所有参数都是必需的，请确保提供完整的6个参数。\n"
+        "  连字符(^)在显示时会自动转换为空格。\n"
     )
-
-def get_customskin_help_text():
-    """获取自定义皮肤帮助文本"""
-    return (
-        "--- 自定义皮肤渲染帮助 ---\n\n"
-        "用法: /customskin <玩家名称> [相机预设] [焦点预设]\n\n"
-        "参数说明:\n"
-        "  <玩家名称>: Minecraft 玩家名称\n"
-        "  [相机预设]: 相机位置预设 (可选)\n"
-        "  [焦点预设]: 相机焦点预设 (可选)\n\n"
-        "使用流程:\n"
-        "1. 输入命令: /customskin <玩家名称>\n"
-        "2. 在指定时间内发送 .obj 模型文件\n"
-        "3. 系统会自动处理并返回渲染结果\n\n"
-        "支持的模型格式: .obj 文件"
-    )
-
-# ========== 文件传输功能 ==========
-async def upload_to_tmpfiles(session, file_path: str) -> str | None:
-    """上传文件到 tmpfiles.org 并返回下载链接"""
-    try:
-        with open(file_path, 'rb') as f:
-            form_data = aiohttp.FormData()
-            form_data.add_field('file', f, filename=os.path.basename(file_path))
-            
-            async with session.post('https://tmpfiles.org/api/v1/upload', data=form_data) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    if result.get('status') == 'success':
-                        download_url = result['data']['url']
-                        # 将 URL 转换为直接下载链接
-                        if 'tmpfiles.org/' in download_url:
-                            download_url = download_url.replace('tmpfiles.org/', 'tmpfiles.org/dl/')
-                        return download_url
-        return None
-    except Exception as e:
-        logger.error(f"上传到 tmpfiles.org 失败: {e}")
-        return None
 
 # ========== 主插件类 ==========
 @register(
-    "MCSkinRender",
-    "SatellIta",
-    "使用 Starlight API 异步获取 Minecraft 皮肤的多种渲染图、动作和护照生成",
-    "1.1.1",
-    "https://github.com/SatellIta/astrbot_plugin_minecraft_skin_render"
+    "MCProductRenderer",
+    "CecilyGao & SatellIta",
+    "生成 Minecraft 玩家文创预览图",
+    "1.0.0",
+    "https://github.com/CecilyGao/astrbot_plugin_minecraft_product_render"
 )
-class MCSkinPlugin(Star):
+class MCProductPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig = None):
         super().__init__(context)
         self.config = config
@@ -476,13 +301,12 @@ class MCSkinPlugin(Star):
     # ========== Passport 生成功能 ==========
     async def generate_passport(self, rendertype: str, username: str, rgb_str: str, 
                               title: str, message: str, wish: str) -> tuple[list[BytesIO], str | None]:
-        """生成护照图片"""
+        """生成通行证图片"""
         try:
             # 解析RGB
             theme_rgb = parse_theme_rgb(rgb_str)
             
             # 将连字符替换为空格（允许中文输入）
-            # 在 generate_passport 函数中，将连字符替换为空格的部分改为：
             title = replace_hyphens_with_spaces(str(title) if title is not None else "")
             message = replace_hyphens_with_spaces(str(message) if message is not None else "")
             wish = replace_hyphens_with_spaces(str(wish) if wish is not None else "")
@@ -630,219 +454,10 @@ class MCSkinPlugin(Star):
             return output_images, None
             
         except Exception as e:
-            logger.error(f"生成通行证时发生错误: {e}", exc_info=True)
-            return [], f"生成通行证时发生错误: {str(e)}"
+            logger.error(f"生成文创时发生错误: {e}", exc_info=True)
+            return [], f"生成文创时发生错误: {str(e)}"
 
     # ========== 命令处理器 ==========
-    @filter.command("skin")
-    async def get_skin(
-        self,
-        event: AstrMessageEvent,
-        param1: str = None,
-        param2: str = None
-    ):
-        """获取 Minecraft 玩家皮肤的渲染图"""
-        if not param1:
-            yield event.plain_result(
-                "错误：请提供玩家名称。\n"
-                "用法1: /skin <玩家名称>\n"
-                "用法2: /skin <渲染类型> <玩家名称>"
-            )
-            return
-
-        username: str
-        rendertype: str
-
-        if param2:
-            is_valid_type, _ = validate_rendertype(param1.lower())
-            if is_valid_type:
-                rendertype = param1
-                username = param2
-            else:
-                username = param1
-                rendertype = DEFAULT_RENDERTYPE
-                logger.warning(f"参数 '{param1}' 不是有效的渲染类型，已忽略第二个参数 '{param2}'，并使用默认渲染类型。")
-        else:
-            username = param1
-            rendertype = DEFAULT_RENDERTYPE
-
-        result = await process_skin_command(self.session, username, rendertype)
-        if isinstance(result, str):
-            yield event.plain_result(result)
-        else:
-            yield event.chain_result(result)
-
-    @filter.command("wallpaper")
-    async def get_wallpaper(
-        self,
-        event: AstrMessageEvent,
-        param1: str = None,
-        param2: str = None,
-        param3: str = None,
-        param4: str = None
-    ):
-        """获取 Minecraft 壁纸"""
-        if not param1:
-            yield event.plain_result(
-                "错误：请提供玩家名称或壁纸ID。\n"
-                f"用法1: /wallpaper <玩家名称1> [玩家名称2] ...\n"
-                f"用法2: /wallpaper <壁纸ID> <玩家名称1> [玩家名称2] ..."
-            )
-            return
-
-        wallpaper_id: str
-        usernames: list[str]
-
-        is_valid_wallpaper, _, _ = validate_wallpaper(param1.lower())
-        if is_valid_wallpaper:
-            wallpaper_id = param1
-            usernames = [p for p in [param2, param3, param4] if p]
-        else:
-            wallpaper_id = DEFAULT_WALLPAPER
-            usernames = [p for p in [param1, param2, param3, param4] if p]
-
-        result = await process_wallpaper_command(self.session, wallpaper_id, usernames)
-        if isinstance(result, str):
-            yield event.plain_result(result)
-        else:
-            yield event.chain_result(result)
-
-    @filter.command("skinhelp")
-    async def skin_help(self, event: AstrMessageEvent):
-        """显示帮助信息"""
-        full_help = get_help_text()
-        yield event.plain_result(full_help)
-
-    @filter.command("customskinhelp")
-    async def custom_skin_help(self, event: AstrMessageEvent):
-        """显示自定义皮肤帮助"""
-        full_help = get_customskin_help_text()
-        yield event.plain_result(full_help)
-
-    @filter.command("customskin")
-    async def custom_skin(self, event: AstrMessageEvent, username: str = None, camera_preset: str = None, focal_preset: str = None):
-        """使用自定义模型渲染皮肤"""
-        if not username:
-            yield event.plain_result("错误：请提供玩家名称。\n用法: /customskin <玩家名称> [相机预设] [焦点预设]")
-            return
-
-        # 1. 获取玩家 UUID
-        uuid, error_msg = await get_player_uuid(self.session, username)
-        if error_msg:
-            yield event.plain_result(error_msg)
-            return
-
-        # 2. 发送提示
-        prompt_msg = (
-            f"请在 {FILE_WAIT_TIMEOUT} 秒内发送一个 .obj 模型文件 "
-            f"来为玩家 {username} 进行渲染。"
-        )
-        await event.send(event.plain_result(prompt_msg))
-
-        # 2.1 解析用户可选参数
-        camera_param_raw = camera_preset
-        focal_param_raw = focal_preset
-
-        # 3. 定义并启动会话控制器
-        @session_waiter(timeout=FILE_WAIT_TIMEOUT, record_history_chains=False)
-        async def custom_skin_waiter(controller: SessionController, event: AstrMessageEvent):
-            file_component = None
-            # 遍历消息组件，查找 File 类型的组件
-            for component in event.get_messages():
-                if isinstance(component, File):
-                    file_component = component
-                    break
-            
-            if not file_component:
-                return
-
-            local_path = await file_component.get_file()
-
-            try:
-                # 根据配置决定使用本地文件服务还是公共中转服务
-                if self.config and self.config.get("use_file_transfer"):
-                    # 使用公共中转服务 (tmpfiles.org)
-                    logger.info("use_file_transfer 已开启，使用 tmpfiles.org 上传...")
-                    stable_url = await upload_to_tmpfiles(self.session, local_path)
-                else:
-                    # 使用内置文件服务
-                    logger.info("use_file_transfer 未开启或未配置，使用内置文件服务注册...")
-                    stable_url = await file_component.register_to_file_service()
-
-                if not stable_url:
-                    await event.send(event.plain_result("错误：文件上传或注册失败，无法获取有效的 URL。"))
-                    controller.stop()
-                    return
-
-                logger.info(f"文件服务返回的稳定 URL: {stable_url}")
-
-                # 2. 解析并决定最终使用的相机与焦点参数
-                def resolve_position_param(raw_value, presets, default):
-                    if not raw_value:
-                        return default
-                    raw_lower = raw_value.lower()
-                    # 如果用户提供了一个预置名
-                    if raw_lower in presets:
-                        return presets[raw_lower]
-                    # 否则尝试解析 JSON
-                    try:
-                        parsed = json.loads(raw_value)
-                        if isinstance(parsed, dict):
-                            return parsed
-                    except Exception:
-                        pass
-                    # 无法解析则返回默认并告知用户（但不抛错）
-                    return default
-
-                camera_position = resolve_position_param(camera_param_raw, CAMERA_PRESETS, DEFAULT_CAMERA_POSITION)
-                camera_focal = resolve_position_param(focal_param_raw, FOCAL_PRESETS, DEFAULT_CAMERA_FOCAL_POINT)
-
-                # 3. 将 URL 和额外参数传递给 action 构建最终的渲染URL
-                result_chain = await upload_and_render_custom_skin(
-                    self.session,
-                    uuid,
-                    stable_url,
-                    username,
-                    camera_position=camera_position,
-                    camera_focal_point=camera_focal,
-                )
-
-                # 4. 发送结果
-                await event.send(event.chain_result(result_chain))
-                controller.stop() # 成功处理，结束会话
-
-            except Exception as e:
-                logger.error(f"文件服务注册或处理时失败: {e}", exc_info=True)
-                await event.send(event.plain_result("错误：文件处理失败。请检查机器人配置文件中的 `callback_api_base` 是否正确设置。"))
-                controller.stop()
-
-            finally:
-                if local_path and os.path.exists(local_path):
-                    # 定义一个后台清理函数
-                    async def delayed_cleanup(path, delay=20):
-                        await asyncio.sleep(delay)
-                        try:
-                            if os.path.exists(path):
-                                os.remove(path)
-                                logger.info(f"延迟清理完成: {path}")
-                            else:
-                                logger.warning(f"文件已不存在，跳过清理：{path}")
-                        except Exception as e:
-                            logger.error(f"延迟清理文件{path}时失败：{e}")
-
-                    logger.info(f"为{local_path}创建了延迟清理任务")
-                    asyncio.create_task(delayed_cleanup(local_path))
-
-        try:
-            await custom_skin_waiter(event)
-        except TimeoutError:
-            yield event.plain_result("操作超时，已取消渲染。")
-        except Exception as e:
-            logger.error(f"customskin 会话期间发生未知错误: {e}", exc_info=True)
-            yield event.plain_result(f"处理过程中发生内部错误: {e}")
-        finally:
-            event.stop_event()
-
     @filter.command("passport")
     async def get_passport(
         self,
@@ -857,14 +472,15 @@ class MCSkinPlugin(Star):
         """
         生成Minecraft通行证
         用法: /passport <渲染类型> <玩家名> <RGB> <称号> <想说的话> <愿望>
-        示例: /passport default Notch "255,0,0" "我的-称号" "你好-世界" "好运-连连"
+        示例: /passport default Notch "255,0,0" "我的^称号" "你好^世界" "好运^连连"
         """
         if not all([rendertype, username, rgb, title, message, wish]):
             yield event.plain_result(
-                "错误：请提供所有必需参数。\n"
-                "用法: /passport <渲染类型> <玩家名> <RGB> <称号> <想说的话> <愿望>\n"
-                "示例: /passport default Notch \"255,0,0\" \"我的-称号\" \"你好-世界\" \"好运-连连\"\n"
-                "注意: 参数中的空格请用连字符(-)代替"
+                "错误：请提供所有必需参数。\n\n"
+                "用法: /passport <渲染类型> <玩家名> <RGB> <称号> <想说的话> <愿望>\n\n"
+                "示例: /passport default Notch 255,0,0 我的^称号 你好^世界 好运^连连\n\n"
+                "注意: 参数中的空格请用尖号(^)代替\n\n"
+                "输入 /producthelp 查看详细帮助"
             )
             return
 
@@ -876,7 +492,7 @@ class MCSkinPlugin(Star):
 
         yield event.plain_result("正在生成通行证，请稍候...")
 
-        # 生成护照
+        # 生成通行证
         images, error_msg = await self.generate_passport(rendertype, username, rgb, title, message, wish)
         if error_msg:
             yield event.plain_result(error_msg)
@@ -892,7 +508,13 @@ class MCSkinPlugin(Star):
         
         yield event.chain_result(chain)
 
+    @filter.command("producthelp")
+    async def product_help(self, event: AstrMessageEvent):
+        """显示帮助信息"""
+        full_help = get_product_help_text()
+        yield event.plain_result(full_help)
+
     async def terminate(self):
         """清理资源"""
         await self.session.close()
-        logger.info("MCSkinPlugin: aiohttp session 已成功关闭")
+        logger.info("MCProductPlugin: aiohttp session 已成功关闭")
