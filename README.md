@@ -36,6 +36,8 @@ git clone https://github.com/CecilyGao/astrbot_plugin_minecraft_product_render
 - `/passport walking Noname2309 153,102,204 114514 Keep^the^original^heart^and-purity See-you-next-time` - 行走动作的全身渲染
 - `/passport cheering AintCecily 120,140,30 Journal^Editor Curiosity^will^never^let^me^go. 我才是奶龙！` - 欢呼动作的全身渲染
 
+<img width="827" height="2597" alt="template" src="https://github.com/user-attachments/assets/1bfb353b-e184-452e-ac19-e74a103c0856" />
+
 ---
 
 ## 帮助命令
