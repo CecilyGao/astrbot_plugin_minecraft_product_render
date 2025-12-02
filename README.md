@@ -1,17 +1,17 @@
-# AstrBot Minecraft 皮肤插件 (MCSkinRenderer)
-用于获取 Minecraft 玩家皮肤的 3D 渲染图（支持动作）、2D 头像或皮肤文件。
+# AstrBot Minecraft 文创制作插件 (MCProductRenderer)
+用于获取 Minecraft 玩家皮肤的 3D 渲染图（支持动作）用于制作通行证等MC文创，本仓库限南京大学MC社使用，如有需求可替换仓库文件。
 
 # 🔧 安装
 方法一：使用插件市场 (推荐)
 
-搜索 MC皮肤渲染插件 并安装
+搜索 MC文创渲染插件 并安装
 
 方法二：Git Clone
 
 进入 AstrBot 的 data/plugins/ 目录，然后执行：
 
 ```bash
-git clone https://github.com/SatellIta/astrbot_plugin_minecraft_skin_render
+git clone https://github.com/CecilyGao/astrbot_plugin_minecraft_product_render
 ```
 
 安装依赖
@@ -20,40 +20,23 @@ git clone https://github.com/SatellIta/astrbot_plugin_minecraft_skin_render
 
 # 🚀 使用说明
 
-## 指令1：获取皮肤渲染
-`/skin [rendertype] <username>`
+## 指令1：获取通行证渲染
+`/passport [rendertype] <username> RGB 'title' 'message' 'wish' `
 
-### 参数
-- `[rendertype]`: 可选。渲染类型，默认为 `default`
+### 参数（参数内空格使用^占位，参数间使用空格隔开）
+- `[rendertype]`: 列表选择。渲染类型，默认为 `default`
 - `<username>`: 必需。玩家名称（带空格请使用引号，如 "Steve Jobs"）
+- `RGB`: 必需。输入RGB值选择通行证主色调
+- `title`: 必需。玩家头衔，空格使用^占位
+- `message`: 必需。玩家信息、格言、座右铭等，空格使用^占位
+- `wish`: 必需。玩家愿望，空格使用^占位
 
 ### 示例
-- `/skin Notch` - 默认全身渲染
-- `/skin Notch walking` - 行走动作的全身渲染
-- `/skin jeb_ cheering` - 欢呼动作的全身渲染
-
----
-
-## 指令2：生成壁纸
-`/wallpaper [wallpaper_id] <玩家名1> [玩家名2] [玩家名3]`
-
-### 参数
-- `[wallpaper_id]`: 可选。壁纸ID，默认为 `herobrine_hill`
-- `<玩家名...>`: 必需。至少1个玩家名称，不同壁纸支持不同数量的玩家
-
-### 可用壁纸及玩家上限
-- `herobrine_hill` - 最多1个玩家
-- `malevolent` - 最多1个玩家
-- `off_to_the_stars` - 最多1个玩家
-- `quick_hide` - 最多3个玩家
-- `wheat` - 最多1个玩家
-
-### 示例
-- `/wallpaper herobrine_hill Notch` - 生成 Herobrine Hill 壁纸
-- `/wallpaper quick_hide Notch jeb_ Dream` - 生成 Quick Hide 壁纸（3个玩家）
-- `/wallpaper Notch` - 使用默认壁纸生成
+- `/passport default AintCecily 170,140,30 Ain't^A^Lord Curiosity^will^never^let^me^go. 我是奶龙！` - 默认全身渲染
+- `/passport walking Noname2309 153,102,204 114514 Keep^the^original^heart^and-purity See-you-next-time` - 行走动作的全身渲染
+- `/passport cheering AintCecily 120,140,30 Journal^Editor Curiosity^will^never^let^me^go. 我才是奶龙！` - 欢呼动作的全身渲染
 
 ---
 
 ## 帮助命令
-`/skinhelp` - 查看所有可用的渲染类型和壁纸列表
+`/producthelp` - 查看所有可用的渲染类型和壁纸列表
