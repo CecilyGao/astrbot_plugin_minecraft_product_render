@@ -1,4 +1,4 @@
-# AstrBot Minecraft 文创制作插件 (MCProductRenderer)
+# AstrBot Minecraft 文创渲染插件 (MCProductRenderer)
 用于获取 Minecraft 玩家皮肤的 3D 渲染图（支持动作）用于制作通行证等MC文创，本仓库限南京大学MC社使用，如有需求可替换仓库文件。
 
 # 🔧 安装
