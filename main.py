@@ -49,7 +49,7 @@ PASSPORT_CONFIG = {
         'title': {
             'center': (0.985, 0.725),
             'align': 'R',
-            'size': 80,
+            'size': 78,
             'max_width': 100000000,
             'fonts': ['NotoSansSChineseMedium-7.ttf'],
             'opacity': 230,
@@ -65,7 +65,7 @@ PASSPORT_CONFIG = {
             'shadow': 0
         },
         'wish': {
-            'center': (0.16, 0.945),
+            'center': (0.16, 0.946),
             'align': 'L',
             'size': 60,
             'max_width': 5000000000,
@@ -274,7 +274,7 @@ def get_product_help_text():
 @register(
     "MCProductRenderer",
     "CecilyGao & SatellIta",
-    "用于获取Minecraft玩家皮肤的3D渲染图（支持动作）用于制作通行证等MC文创",
+    "生成 Minecraft 玩家文创预览图",
     "1.0.0",
     "https://github.com/CecilyGao/astrbot_plugin_minecraft_product_render"
 )
@@ -296,67 +296,6 @@ class MCProductPlugin(Star):
                     continue
         # 回退到默认字体
         return ImageFont.load_default()
-    
-    def _draw_text_layer(self, overlay_img, username, title, message, wish):
-        """绘制文本图层到指定的图像上"""
-        W, H = overlay_img.size
-        
-        # 文本映射
-        text_map = {
-            'uid': username.upper(),
-            'title': title,
-            'message': message,
-            'wish': wish,
-            'watermark': PASSPORT_CONFIG['watermark_text']
-        }
-        
-        # 创建一个绘制对象
-        draw = ImageDraw.Draw(overlay_img)
-        
-        for key, cfg in PASSPORT_CONFIG['text_config'].items():
-            text = text_map[key]
-            if not text:
-                continue
-
-            cx = int(W * cfg['center'][0])
-            cy = int(H * cfg['center'][1])
-            font = self._load_font(cfg['fonts'], cfg['size'])
-            bbox = draw.textbbox((0, 0), text, font=font)
-            w = bbox[2] - bbox[0]
-            h = bbox[3] - bbox[1]
-
-            if cfg['align'] == 'L':
-                if key == 'wish':
-                    x = cx
-                    y = cy - h
-                    draw_text_with_wrap_and_left_bottom_align(draw, font, text, x, y, cfg['max_width'], cfg['opacity'])
-                else:
-                    x = cx
-                    y = cy - h // 2
-                    if cfg.get('shadow', 0) > 0:
-                        sd = cfg['shadow']
-                        draw.text((x + sd, y + sd), text, font=font, fill=(0, 0, 0, cfg['opacity']))
-                    draw.text((x, y), text, font=font, fill=(255, 255, 255, cfg['opacity']))
-
-            elif cfg['align'] == 'R':
-                if key == 'uid':
-                    size = cfg['size']
-                    while w > PASSPORT_CONFIG['uid_max_length'] and size > 8:
-                        size -= 2
-                        font = self._load_font(cfg['fonts'], size)
-                        bbox = draw.textbbox((0, 0), text, font=font)
-                        w = bbox[2] - bbox[0]
-                        h = bbox[3] - bbox[1]
-
-                x = cx - w
-                y = cy - h // 2
-                if cfg.get('shadow', 0) > 0:
-                    sd = cfg['shadow']
-                    draw.text((x + sd, y + sd), text, font=font, fill=(0, 0, 0, cfg['opacity']))
-                draw.text((x, y), text, font=font, fill=(255, 255, 255, cfg['opacity']))
-
-            else:  # 'M' center
-                draw_centered_text(draw, font, text, cx, cy, cfg['opacity'])
 
     # ========== Passport 生成功能 ==========
     async def generate_passport(self, rendertype: str, username: str, rgb_str: str, 
@@ -434,40 +373,77 @@ class MCProductPlugin(Star):
             base0_tinted_arr = gray_to_hsv_tint(base0_arr, theme_rgb)
             base0_tinted = Image.fromarray(base0_tinted_arr, 'RGBA')
             
-            # 2. 生成着色后的base图
+            # 2. 生成着色后的base与overlay叠加图
             base_arr = np.array(base_img)
             base_tinted_arr = gray_to_hsv_tint(base_arr, theme_rgb)
             base_tinted = Image.fromarray(base_tinted_arr, 'RGBA')
             
-            # 创建一个纯透明的文本图层（放在最上面）
-            text_layer = Image.new("RGBA", target_size, (0, 0, 0, 0))
+            # 在overlay上绘制文本
+            overlay_draw = ImageDraw.Draw(overlay_img)
+            W, H = target_size
             
-            # 创建一个带文本的overlay副本（用于底部叠加图）
-            overlay_with_text = overlay_img.copy()
+            # 文本映射（直接使用原始文本，不再过滤不兼容字符）
+            text_map = {
+                'uid': username.upper(),
+                'title': title,
+                'message': message,
+                'wish': wish,
+                'watermark': PASSPORT_CONFIG['watermark_text']
+            }
             
-            # 在text_layer上绘制文本（用于完整成品图的最上层）
-            self._draw_text_layer(text_layer, username, title, message, wish)
+            for key, cfg in PASSPORT_CONFIG['text_config'].items():
+                text = text_map[key]
+                if not text:
+                    continue
+
+                cx = int(W * cfg['center'][0]); cy = int(H * cfg['center'][1])
+                font = self._load_font(cfg['fonts'], cfg['size'])
+                bbox = overlay_draw.textbbox((0,0), text, font=font)
+                w = bbox[2] - bbox[0]; h = bbox[3] - bbox[1]
+
+                if cfg['align'] == 'L':
+                    if key == 'wish':
+                        x = cx; y = cy - h
+                        draw_text_with_wrap_and_left_bottom_align(overlay_draw, font, text, x, y, cfg['max_width'], cfg['opacity'])
+                    else:
+                        x = cx; y = cy - h//2
+                        if cfg.get('shadow',0) > 0:
+                            sd = cfg['shadow']
+                            overlay_draw.text((x+sd, y+sd), text, font=font, fill=(0,0,0,cfg['opacity']))
+                        overlay_draw.text((x, y), text, font=font, fill=(255,255,255,cfg['opacity']))
+
+                elif cfg['align'] == 'R':
+                    if key == 'uid':
+                        size = cfg['size']
+                        while w > PASSPORT_CONFIG['uid_max_length'] and size > 8:
+                            size -= 2
+                            font = self._load_font(cfg['fonts'], size)
+                            bbox = overlay_draw.textbbox((0,0), text, font=font)
+                            w = bbox[2] - bbox[0]; h = bbox[3] - bbox[1]
+
+                    x = cx - w; y = cy - h//2
+                    if cfg.get('shadow',0) > 0:
+                        sd = cfg['shadow']
+                        overlay_draw.text((x+sd, y+sd), text, font=font, fill=(0,0,0,cfg['opacity']))
+                    overlay_draw.text((x, y), text, font=font, fill=(255,255,255,cfg['opacity']))
+
+                else:  # 'M' center
+                    draw_centered_text(overlay_draw, font, text, cx, cy, cfg['opacity'])
             
-            # 在overlay_with_text上绘制文本（用于底部叠加图）
-            self._draw_text_layer(overlay_with_text, username, title, message, wish)
+            # 叠加base和overlay
+            base_overlay = Image.alpha_composite(base_tinted, overlay_img)
             
-            # 底部叠加图：base_tinted + overlay_with_text
-            bottom_overlay = Image.alpha_composite(base_tinted, overlay_with_text)
-            
-            # 完整成品图：skin + base0_tinted + base_tinted + overlay（不带文本）+ text_layer（最上面）
+            # 3. 生成完整成品图 (skin + base_overlay + base0_tinted)
             result = Image.alpha_composite(skin_img, base0_tinted)
-            result = Image.alpha_composite(result, base_tinted)
-            result = Image.alpha_composite(result, overlay_img)  # 不带文本的overlay
-            result = Image.alpha_composite(result, text_layer)   # 文本图层置顶
+            result = Image.alpha_composite(result, base_overlay)
             
             # 转换为BytesIO
             output_images = []
             for img, name in [
                 (result, "成品图"),
                 (base0_tinted, "顶端着色图"),
-                (bottom_overlay, "底部叠加图"),
-                (skin_img, "皮肤渲染图"),
-                (text_layer, "文本图层")
+                (base_overlay, "底部叠加图"),
+                (skin_img, "皮肤渲染图")
             ]:
                 bio = BytesIO()
                 img.save(bio, format='PNG')
@@ -522,7 +498,7 @@ class MCProductPlugin(Star):
             return
 
         # 发送所有图片
-        image_names = ["完整成品图", "顶端着色图", "底部叠加图", "皮肤渲染图", "文本图层"]
+        image_names = ["完整成品图", "顶端着色图", "底部叠加图", "皮肤渲染图"]
         chain = [Comp.Plain(f"为 {username} 生成的通行证图片：\n")]
         
         for i, (img_bio, name) in enumerate(zip(images, image_names)):
