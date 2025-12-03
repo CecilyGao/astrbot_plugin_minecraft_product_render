@@ -274,7 +274,7 @@ def get_product_help_text():
 @register(
     "MCProductRenderer",
     "CecilyGao & SatellIta",
-    "生成 Minecraft 玩家文创预览图",
+    "用于获取Minecraft玩家皮肤的3D渲染图（支持动作）用于制作通行证等MC文创",
     "1.0.0",
     "https://github.com/CecilyGao/astrbot_plugin_minecraft_product_render"
 )
