@@ -51,7 +51,7 @@ PASSPORT_CONFIG = {
             'align': 'R',
             'size': 80,
             'max_width': 100000000,
-            'fonts': ['SourceHanSansCN-Normal.ttf'],
+            'fonts': ['NotoSansSChineseThin-4.ttf'],
             'opacity': 230,
             'shadow': 2
         },
@@ -60,7 +60,7 @@ PASSPORT_CONFIG = {
             'align': 'M',
             'size': 70,
             'max_width': 100000000,
-            'fonts': ['字魂白润体(商用需授权).ttf'],
+            'fonts': ['NotoSansSChineseMedium-7.ttf'],
             'opacity': 200,
             'shadow': 0
         },
@@ -69,7 +69,7 @@ PASSPORT_CONFIG = {
             'align': 'L',
             'size': 60,
             'max_width': 5000000000,
-            'fonts': ['字魂太阿楷书(商用需授权).ttf'],
+            'fonts': ['Noto-Sans-S-Chinese-Bold-Bold-6.otf'],
             'opacity': 180,
             'shadow': 0
         },
