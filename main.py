@@ -2,7 +2,7 @@ import aiohttp
 import json
 import asyncio, os
 import astrbot.api.message_components as Comp
-from astrbot.api.message_components import File
+from astrbot.api.message_components import File, Reply, Image as ImgComponent, At
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger, AstrBotConfig
@@ -85,6 +85,29 @@ PASSPORT_CONFIG = {
     },
     'watermark_text': "Let's play a lifelong club",
     'uid_max_length': 1635
+}
+
+# ========== Postcard 配置 ==========
+POSTCARD_CONFIG = {
+    'horizontal': {  # 横向明信片
+        'canvas_size': (3840, 2160),  # 宽x高
+        'image_size': (3740, 2060),   # 图片区域尺寸
+        'image_position': (50, 50),   # 图片左上角位置
+        'watermark_positions': {
+            'l': (60, 1950),  # 左下角位置 (x, y)
+            'r': (3840, 1950)  # 右下角位置 (x, y)
+        }
+    },
+    'vertical': {    # 竖向明信片
+        'canvas_size': (2160, 3840),  # 宽x高
+        'image_size': (2060, 3740),   # 图片区域尺寸
+        'image_position': (50, 50),   # 图片左上角位置
+        'watermark_positions': {
+            'l': (60, 3640),  # 左下角位置 (x, y)
+            'r': (2160, 3640)  # 右下角位置 (x, y)
+        }
+    },
+    'watermark_target_size': (1600, 144)  # 修改：目标水印尺寸 1600x144
 }
 
 # ========== 工具函数 ==========
@@ -255,20 +278,40 @@ def replace_hyphens_with_spaces(text: str) -> str:
 def get_product_help_text():
     """获取文创渲染帮助文本"""
     return (
-        "--- Minecraft 文创渲染插件帮助 ---\n"
+        "\n--- Minecraft 文创渲染插件帮助 ---\n"
         "【指令1】/passport <渲染类型> <玩家名> <RGB> <称号> <想说的话> <愿望>\n"
         "  » 示例: /passport default Notch 255,0,0 my^title Hello,^world! 好运^连连Good-luck!\n"
-        "  参数说明:\n"
-        "  <渲染类型>: 皮肤渲染类型，可选值如下：\n"
+        "参数说明:\n"
+        " <渲染类型>: 皮肤渲染类型，可选值如下：\n"
         f"    {', '.join(VALID_RENDERTYPES)}\n"
-        "  <玩家名>: Minecraft 玩家名称\n"
-        "  <RGB>: 颜色值，格式: 255,0,0 (红,绿,蓝)\n"
-        "  <称号>: 玩家称号（支持中英文，空格用^<shift+6>代替）\n"
-        "  <想说的话>: 玩家想说的话（支持中英文，空格用^<shift+6>代替）\n"
-        "  <愿望>: 玩家的愿望（支持中英文，空格用^<shift+6>代替）\n"
-        "  注意：所有参数都是必需的，请确保提供完整的6个参数。\n"
-        "  连字符(^)在显示时会自动转换为空格。\n"
+        " <玩家名>: Minecraft 玩家名称\n"
+        " <RGB>: 颜色值，格式: 255,0,0 (红,绿,蓝)\n"
+        " <称号>: 玩家称号（支持中英文，空格用^<shift+6>代替）\n"
+        " <想说的话>: 玩家想说的话（支持中英文，空格用^<shift+6>代替）\n"
+        " <愿望>: 玩家的愿望（支持中英文，空格用^<shift+6>代替）\n"
+        " 注意：所有参数都是必需的，请确保提供完整的6个参数。\n"
+        " 连字符(^)在显示时会自动转换为空格。\n\n"
+        "【指令2】/postcard <横竖> <左右> <黑白> <旋转> （需要引用一张图片）\n"
+        "  » 示例: /postcard v l w + （引用一张图片）\n"
+        "参数说明:\n"
+        " <横竖>: 明信片方向，h为横向（3840x2160），v为竖向（2160x3840）\n"
+        " <左右>: 水印位置，l为左下角，r为右下角\n"
+        " <黑白>: 水印颜色，b为黑色水印，w为白色水印\n"
+        " <旋转>: 旋转原图，+为顺时针旋转90°，-为逆时针旋转90°，0为不旋转，留空默认为0"
     )
+
+async def download_image(session: aiohttp.ClientSession, url: str) -> bytes | None:
+    """下载图片"""
+    try:
+        async with session.get(url, timeout=30) as resp:
+            if resp.status == 200:
+                return await resp.read()
+            else:
+                logger.warning(f"无法下载图片 (状态: {resp.status}) URL: {url}")
+                return None
+    except Exception as e:
+        logger.error(f"下载图片时发生错误: {e}")
+        return None
 
 # ========== 主插件类 ==========
 @register(
@@ -296,6 +339,110 @@ class MCProductPlugin(Star):
                     continue
         # 回退到默认字体
         return ImageFont.load_default()
+
+    # ========== Postcard 生成功能 ==========
+    async def generate_postcard(self, orientation: str, watermark_pos: str, watermark_color: str, rotation: str, image_bytes: bytes) -> tuple[BytesIO | None, str | None]:
+        """生成明信片图片"""
+        try:
+            # 验证参数
+            if orientation not in ['h', 'v']:
+                return None, "参数错误：横竖方向必须是 'h'(横向) 或 'v'(竖向)"
+            if watermark_pos not in ['l', 'r']:
+                return None, "参数错误：水印位置必须是 'l'(左下) 或 'r'(右下)"
+            if watermark_color not in ['b', 'w']:
+                return None, "参数错误：水印颜色必须是 'b'(黑色) 或 'w'(白色)"
+            if rotation not in ['+', '-', '0', '']:
+                return None, "参数错误：旋转参数必须是 '+'、'-'、'0' 或留空"
+            
+            # 获取配置
+            config_key = 'horizontal' if orientation == 'h' else 'vertical'
+            config = POSTCARD_CONFIG[config_key]
+            
+            canvas_size = config['canvas_size']
+            image_size = config['image_size']
+            image_position = config['image_position']
+            watermark_position = config['watermark_positions'][watermark_pos]
+            
+            # 创建白色画布
+            canvas = Image.new('RGB', canvas_size, 'white')
+            
+            # 加载并处理图片
+            try:
+                user_image = Image.open(BytesIO(image_bytes)).convert('RGBA')
+            except Exception as e:
+                return None, f"无法加载图片: {str(e)}"
+            
+            # 应用旋转
+            if rotation == '+':
+                user_image = user_image.rotate(90, expand=True)
+            elif rotation == '-':
+                user_image = user_image.rotate(-90, expand=True)
+            # rotation == '0' 或 '' 时不旋转
+            
+            # 直接缩放图片到指定尺寸
+            user_image_resized = user_image.resize(image_size, Image.Resampling.LANCZOS)
+            
+            # 创建临时图层放置图片
+            image_layer = Image.new('RGBA', canvas_size, (255, 255, 255, 0))
+            image_layer.paste(user_image_resized, image_position)
+            
+            # 合并图片到画布
+            canvas = Image.alpha_composite(canvas.convert('RGBA'), image_layer).convert('RGB')
+            
+            # 只使用白色水印文件，黑色水印通过反相实现
+            watermark_filename = "NJU Minecraft Organization.png"
+            watermark_path = self.plugin_path / watermark_filename
+            if not watermark_path.exists():
+                return None, f"水印文件不存在: {watermark_filename}"
+            
+            watermark = Image.open(watermark_path).convert('RGBA')
+            
+            # 如果是黑色水印，进行反相处理
+            if watermark_color == 'b':
+                # 分离通道
+                r, g, b, a = watermark.split()
+                # 对RGB通道进行反相（255 - 原值），Alpha通道保持不变
+                r = r.point(lambda x: 255 - x)
+                g = g.point(lambda x: 255 - x)
+                b = b.point(lambda x: 255 - x)
+                # 合并通道
+                watermark = Image.merge('RGBA', (r, g, b, a))
+            
+            # 修改：缩放水印到目标尺寸 (1600x144)
+            target_width, target_height = POSTCARD_CONFIG['watermark_target_size']
+            watermark_resized = watermark.resize((target_width, target_height), Image.Resampling.LANCZOS)
+            
+            # 计算水印位置
+            wm_x, wm_y = watermark_position
+            # 调整位置确保水印在画布内
+            if watermark_pos == 'r':
+                wm_x = wm_x - watermark_resized.width
+            
+            # 确保水印不会超出画布底部
+            if wm_y + watermark_resized.height > canvas_size[1]:
+                wm_y = canvas_size[1] - watermark_resized.height - 10  # 留10像素边距
+            
+            # 确保水印不会超出画布左侧
+            if wm_x < 0:
+                wm_x = 10  # 留10像素边距
+            
+            # 创建水印图层
+            watermark_layer = Image.new('RGBA', canvas_size, (255, 255, 255, 0))
+            watermark_layer.paste(watermark_resized, (wm_x, wm_y), watermark_resized)
+            
+            # 合并水印
+            result = Image.alpha_composite(canvas.convert('RGBA'), watermark_layer)
+            
+            # 转换为BytesIO
+            bio = BytesIO()
+            result.save(bio, format='PNG', quality=95)
+            bio.seek(0)
+            
+            return bio, None
+            
+        except Exception as e:
+            logger.error(f"生成明信片时发生错误: {e}", exc_info=True)
+            return None, f"生成明信片时发生错误: {str(e)}"
 
     # ========== Passport 生成功能 ==========
     async def generate_passport(self, rendertype: str, username: str, rgb_str: str, 
@@ -456,6 +603,45 @@ class MCProductPlugin(Star):
             logger.error(f"生成文创时发生错误: {e}", exc_info=True)
             return [], f"生成文创时发生错误: {str(e)}"
 
+    async def _get_image_from_event(self, event: AstrMessageEvent) -> bytes | None:
+        """从事件中获取图片，参考image_main.py的处理方式"""
+        img_bytes_list = []
+        
+        # 检查消息中的每个组件
+        for seg in event.message_obj.message:
+            # 处理回复消息中的图片
+            if isinstance(seg, Reply) and seg.chain:
+                for s_chain in seg.chain:
+                    if isinstance(s_chain, ImgComponent):
+                        # 优先使用url，如果url不存在则使用file
+                        if s_chain.url:
+                            img_bytes = await download_image(self.session, s_chain.url)
+                            if img_bytes:
+                                img_bytes_list.append(img_bytes)
+                        elif s_chain.file:
+                            # 如果是本地文件，读取文件
+                            try:
+                                with open(s_chain.file, 'rb') as f:
+                                    img_bytes_list.append(f.read())
+                            except Exception as e:
+                                logger.error(f"读取图片文件失败: {e}")
+            
+            # 处理当前消息中的图片
+            elif isinstance(seg, ImgComponent):
+                if seg.url:
+                    img_bytes = await download_image(self.session, seg.url)
+                    if img_bytes:
+                        img_bytes_list.append(img_bytes)
+                elif seg.file:
+                    try:
+                        with open(seg.file, 'rb') as f:
+                            img_bytes_list.append(f.read())
+                    except Exception as e:
+                        logger.error(f"读取图片文件失败: {e}")
+        
+        # 返回第一张图片，如果没有图片则返回None
+        return img_bytes_list[0] if img_bytes_list else None
+
     # ========== 命令处理器 ==========
     @filter.command("passport")
     async def get_passport(
@@ -504,6 +690,74 @@ class MCProductPlugin(Star):
         for i, (img_bio, name) in enumerate(zip(images, image_names)):
             chain.append(Comp.Plain(f"\n{name}：\n"))
             chain.append(Comp.Image.fromBytes(img_bio.getvalue()))
+        
+        yield event.chain_result(chain)
+
+    @filter.command("postcard")
+    async def get_postcard(
+        self,
+        event: AstrMessageEvent,
+        orientation: str = None,
+        watermark_pos: str = None,
+        watermark_color: str = None,
+        rotation: str = '0'
+    ):
+        """
+        生成明信片
+        用法: /postcard <横竖> <左右> <黑白> [<旋转>] （需要引用一张图片）
+        示例: /postcard v l w +
+        """
+        # 检查必需参数
+        if not all([orientation, watermark_pos, watermark_color]):
+            yield event.plain_result(
+                "错误：请提供所有必需参数。\n\n"
+                "用法: /postcard <横竖> <左右> <黑白> [<旋转>] （需要引用一张图片）\n\n"
+                "参数说明:\n"
+                "  <横竖>: h=横向(3840x2160), v=竖向(2160x3840)\n"
+                "  <左右>: l=左下角, r=右下角\n"
+                "  <黑白>: b=黑色水印, w=白色水印\n"
+                "  <旋转>: 旋转原图，+=顺时针90°，-=逆时针90°，0或不填=不旋转\n\n"
+                "示例: 引用一张图片并发送 /postcard v l w +\n\n"
+                "输入 /producthelp 查看详细帮助"
+            )
+            return
+        
+        # 设置默认旋转参数
+        if rotation is None:
+            rotation = '0'
+        
+        # 获取图片
+        image_bytes = await self._get_image_from_event(event)
+        if not image_bytes:
+            yield event.plain_result("错误：请引用一张图片来制作明信片。\n\n用法: 引用一张图片并发送 /postcard <横竖> <左右> <黑白> [<旋转>]")
+            return
+        
+        yield event.plain_result("正在生成明信片，请稍候...")
+        
+        # 生成明信片
+        postcard_image, error_msg = await self.generate_postcard(
+            orientation.lower(),
+            watermark_pos.lower(),
+            watermark_color.lower(),
+            rotation,
+            image_bytes
+        )
+        
+        if error_msg:
+            yield event.plain_result(error_msg)
+            return
+        
+        # 发送明信片
+        orientation_text = "横向(3840x2160)" if orientation == 'h' else "竖向(2160x3840)"
+        watermark_pos_text = "左下角" if watermark_pos == 'l' else "右下角"
+        watermark_color_text = "黑色" if watermark_color == 'b' else "白色"
+        rotation_text = "顺时针90°" if rotation == '+' else "逆时针90°" if rotation == '-' else "不旋转"
+        
+        chain = [
+            Comp.Plain(f"明信片生成成功！\n"),
+            Comp.Plain(f"参数: {orientation_text}, 水印位置: {watermark_pos_text}, 水印颜色: {watermark_color_text}, 旋转: {rotation_text}\n\n"),
+            Comp.Image.fromBytes(postcard_image.getvalue())
+        ]
         
         yield event.chain_result(chain)
 
