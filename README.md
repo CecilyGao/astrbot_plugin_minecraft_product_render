@@ -1,5 +1,5 @@
 # AstrBot Minecraft 文创渲染插件 (MCProductRenderer)
-用于获取 Minecraft 玩家皮肤的 3D 渲染图（支持动作）用于制作通行证等MC文创，本仓库限南京大学MC社使用，如有需求可替换仓库文件。
+用于获取 Minecraft 玩家皮肤的 3D 渲染图（支持动作）用于制作通行证、明信片等MC文创，本仓库素材为南京大学MC社使用，如有需求可替换仓库文件。
 
 # 🔧 安装
 方法一：使用插件市场 (推荐)
@@ -39,6 +39,21 @@ git clone https://github.com/CecilyGao/astrbot_plugin_minecraft_product_render
 <img width="827" height="2597" alt="template" src="https://github.com/user-attachments/assets/1bfb353b-e184-452e-ac19-e74a103c0856" />
 
 ---
+## 指令2：获取明信片渲染
+`/postcard <direction> <position> <color> <rotation>（同时引用一张图片）`
 
+### 参数（参数内空格使用^占位，参数间使用空格隔开）
+- `<direction>`: 必需。明信片方向，h为横向（3840×2160），v为竖向（2160×3840）
+- `<position>`: 必需。水印位置，l为左下角，r为右下角
+- `<color>`: 必需。水印颜色，b为黑色水印，w为白色水印
+- `<rotation>`: 可选。原图旋转方向，+为顺时针旋转90°，-为逆时针旋转90°，0为不旋转，留空默认为0
+
+### 示例
+- `/postcard h l w（引用一张图片）` 
+- `/postcard v r b -（引用一张图片）`
+
+<img width="746" height="1411" alt="IMG_570" src="https://github.com/user-attachments/assets/a6b237e4-0f8f-4bec-b556-80781b66293e" />
+
+---
 ## 帮助命令
-`/producthelp` - 查看所有可用的渲染类型和壁纸列表
+`/producthelp` - 查看所有指令与可用的渲染类型
