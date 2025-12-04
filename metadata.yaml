@@ -1,6 +1,6 @@
 name: astrbot_plugin_minecraft_product_render
 display_name: MC文创渲染插件
-desc:  用于获取 Minecraft 玩家皮肤的 3D 渲染图（支持动作）用于制作通行证等MC文创
+desc:  用于获取 Minecraft 玩家皮肤的 3D 渲染图（支持动作）用于制作通行证、明信片等MC文创
 version: v1.0.0
 author: CecilyGao & SatellIta
 repo: https://github.com/CecilyGao/astrbot_plugin_minecraft_product_render
